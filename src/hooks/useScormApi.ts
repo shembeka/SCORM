@@ -82,15 +82,17 @@ export const useScormApi = () => {
   const scormApi = useCallback(() => {
     const api = {
       LMSInitialize: (parameter: string): string => {
-        console.log('SCORM API: LMSInitialize called', parameter);
+        console.log('✅ SCORM API: LMSInitialize called with parameter:', parameter);
         if (parameter !== '') {
           errorCodeRef.current = '201';
+          console.error('❌ SCORM Error: Invalid parameter for LMSInitialize');
           addEvent({ type: 'initialize', success: false, errorCode: '201' });
           return 'false';
         }
         
         if (isInitialized) {
           errorCodeRef.current = '101';
+          console.error('❌ SCORM Error: Already initialized');
           addEvent({ type: 'initialize', success: false, errorCode: '101' });
           return 'false';
         }
@@ -130,78 +132,90 @@ export const useScormApi = () => {
           });
         }
 
+        console.log('✅ SCORM API: Successfully initialized');
         addEvent({ type: 'initialize', success: true, errorCode: '0' });
         return 'true';
       },
 
       LMSFinish: (parameter: string): string => {
-        console.log('SCORM API: LMSFinish called', parameter);
+        console.log('✅ SCORM API: LMSFinish called with parameter:', parameter);
         if (parameter !== '') {
           errorCodeRef.current = '201';
+          console.error('❌ SCORM Error: Invalid parameter for LMSFinish');
           addEvent({ type: 'terminate', success: false, errorCode: '201' });
           return 'false';
         }
         
         if (!isInitialized) {
           errorCodeRef.current = '301';
+          console.error('❌ SCORM Error: Not initialized');
           addEvent({ type: 'terminate', success: false, errorCode: '301' });
           return 'false';
         }
 
         setIsInitialized(false);
         errorCodeRef.current = '0';
+        console.log('✅ SCORM API: Successfully terminated');
         addEvent({ type: 'terminate', success: true, errorCode: '0' });
         return 'true';
       },
 
       LMSGetValue: (element: string): string => {
-        console.log('SCORM API: LMSGetValue called', element);
+        console.log('📖 SCORM API: LMSGetValue called for element:', element);
         if (!isInitialized) {
           errorCodeRef.current = '301';
+          console.error('❌ SCORM Error: Not initialized');
           addEvent({ type: 'getValue', element, success: false, errorCode: '301' });
           return '';
         }
 
         if (!validateElement(element)) {
           errorCodeRef.current = '201';
+          console.error('❌ SCORM Error: Invalid element:', element);
           addEvent({ type: 'getValue', element, success: false, errorCode: '201' });
           return '';
         }
 
         const value = scormDataRef.current[element] || '';
         errorCodeRef.current = '0';
+        console.log('✅ SCORM API: Retrieved value for', element, '=', value);
         addEvent({ type: 'getValue', element, value, success: true, errorCode: '0' });
         return value;
       },
 
       LMSSetValue: (element: string, value: string): string => {
-        console.log('SCORM API: LMSSetValue called', element, value);
+        console.log('💾 SCORM API: LMSSetValue called -', element, '=', value);
         if (!isInitialized) {
           errorCodeRef.current = '301';
+          console.error('❌ SCORM Error: Not initialized');
           addEvent({ type: 'setValue', element, value, success: false, errorCode: '301' });
           return 'false';
         }
 
         if (!validateElement(element)) {
           errorCodeRef.current = '201';
+          console.error('❌ SCORM Error: Invalid element:', element);
           addEvent({ type: 'setValue', element, value, success: false, errorCode: '201' });
           return 'false';
         }
 
         if (readOnlyElements.has(element)) {
           errorCodeRef.current = '403';
+          console.error('❌ SCORM Error: Element is read-only:', element);
           addEvent({ type: 'setValue', element, value, success: false, errorCode: '403' });
           return 'false';
         }
 
         if (!validateValue(element, value)) {
           errorCodeRef.current = '405';
+          console.error('❌ SCORM Error: Invalid value for', element, ':', value);
           addEvent({ type: 'setValue', element, value, success: false, errorCode: '405' });
           return 'false';
         }
 
         scormDataRef.current[element] = value;
         errorCodeRef.current = '0';
+        console.log('✅ SCORM API: Successfully set', element, '=', value);
         addEvent({ type: 'setValue', element, value, success: true, errorCode: '0' });
         
         // Update package data if we have one
@@ -216,25 +230,29 @@ export const useScormApi = () => {
       },
 
       LMSCommit: (parameter: string): string => {
-        console.log('SCORM API: LMSCommit called', parameter);
+        console.log('💾 SCORM API: LMSCommit called with parameter:', parameter);
         if (parameter !== '') {
           errorCodeRef.current = '201';
+          console.error('❌ SCORM Error: Invalid parameter for LMSCommit');
           addEvent({ type: 'commit', success: false, errorCode: '201' });
           return 'false';
         }
         
         if (!isInitialized) {
           errorCodeRef.current = '301';
+          console.error('❌ SCORM Error: Not initialized');
           addEvent({ type: 'commit', success: false, errorCode: '301' });
           return 'false';
         }
 
         errorCodeRef.current = '0';
+        console.log('✅ SCORM API: Data committed successfully');
         addEvent({ type: 'commit', success: true, errorCode: '0' });
         return 'true';
       },
 
       LMSGetLastError: (): string => {
+        console.log('🔍 SCORM API: LMSGetLastError called, returning:', errorCodeRef.current);
         return errorCodeRef.current;
       },
 
@@ -254,12 +272,14 @@ export const useScormApi = () => {
         };
         
         const message = errorMessages[errorCode] || 'Unknown Error';
+        console.log('📋 SCORM API: LMSGetErrorString called for code:', errorCode, '- Message:', message);
         addEvent({ type: 'getErrorString', value: message, success: true, errorCode: '0' });
         return message;
       },
 
       LMSGetDiagnostic: (errorCode: string): string => {
         const diagnostic = `Diagnostic information for error ${errorCode}`;
+        console.log('🔧 SCORM API: LMSGetDiagnostic called for code:', errorCode);
         addEvent({ type: 'getDiagnostic', value: diagnostic, success: true, errorCode: '0' });
         return diagnostic;
       }

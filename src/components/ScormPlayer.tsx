@@ -22,10 +22,10 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
             (iframeWindow as any).API = scormApi();
             (iframeWindow as any).API_1484_11 = scormApi(); // For SCORM 2004
             
-            console.log('SCORM API injected into iframe for package:', scormPackage.name);
+            console.log('🔌 SCORM API injected into iframe for package:', scormPackage.name);
           }
         } catch (error) {
-          console.error('Failed to inject SCORM API:', error);
+          console.error('❌ Failed to inject SCORM API:', error);
         }
       };
 
@@ -155,6 +155,19 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                   margin: 10px 0;
                   border-left: 4px solid rgba(255,255,255,0.5);
               }
+              .api-status {
+                  background: rgba(0,0,0,0.2);
+                  padding: 10px;
+                  border-radius: 8px;
+                  font-family: monospace;
+                  font-size: 12px;
+                  text-align: left;
+                  margin-top: 20px;
+                  border: 1px solid rgba(255,255,255,0.2);
+              }
+              .success { color: #10b981; }
+              .error { color: #ef4444; }
+              .info { color: #3b82f6; }
           </style>
       </head>
       <body>
@@ -207,8 +220,11 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                   <button onclick="resumeLesson()">▶️ Resume</button>
               </div>
               
-              <div class="status" id="apiLog">
-                  API Log: Ready for package "${pkg.name}"
+              <div class="api-status" id="apiLog">
+                  <div class="info">📡 SCORM API Status: Ready for package "${pkg.name}"</div>
+                  <div style="margin-top: 5px; font-size: 11px; opacity: 0.8;">
+                      ✅ Success | ❌ Error | 📖 Get | 💾 Set | 🔍 Info
+                  </div>
               </div>
           </div>
           
@@ -218,11 +234,32 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
               let packageId = '${pkg.id}';
               let packageName = '${pkg.name}';
               
-              function logMessage(message) {
+              function logMessage(message, type = 'info') {
                   const timestamp = new Date().toLocaleTimeString();
+                  const icons = {
+                      success: '✅',
+                      error: '❌',
+                      info: '📡',
+                      get: '📖',
+                      set: '💾'
+                  };
+                  
+                  const icon = icons[type] || '📡';
+                  const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+                  
                   document.getElementById('apiLog').innerHTML = 
-                      'API Log: [' + timestamp + '] ' + message;
-                  console.log('SCORM [' + packageName + ']:', message);
+                      '<div class="' + className + '">' + icon + ' [' + timestamp + '] ' + message + '</div>' +
+                      '<div style="margin-top: 5px; font-size: 11px; opacity: 0.8;">' +
+                      '✅ Success | ❌ Error | 📖 Get | 💾 Set | 🔍 Info</div>';
+                  
+                  // Also log to browser console with appropriate method
+                  if (type === 'error') {
+                      console.error('🎯 SCORM Content [' + packageName + ']:', message);
+                  } else if (type === 'success') {
+                      console.log('🎯 SCORM Content [' + packageName + ']:', message);
+                  } else {
+                      console.info('🎯 SCORM Content [' + packageName + ']:', message);
+                  }
               }
               
               function updateDisplay() {
@@ -246,12 +283,14 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                           API.LMSSetValue('cmi.core.lesson_location', 'introduction');
                           API.LMSCommit('');
                           lessonStarted = true;
-                          logMessage('Lesson initialized successfully for ' + packageName);
+                          logMessage('Lesson initialized successfully for ' + packageName, 'success');
                       } else {
-                          logMessage('Failed to initialize: ' + API.LMSGetLastError());
+                          const errorCode = API.LMSGetLastError();
+                          const errorMsg = API.LMSGetErrorString(errorCode);
+                          logMessage('Failed to initialize: ' + errorMsg + ' (Code: ' + errorCode + ')', 'error');
                       }
                   } else {
-                      logMessage('SCORM API not available');
+                      logMessage('SCORM API not available', 'error');
                   }
               }
               
@@ -261,30 +300,36 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                   }
                   
                   if (typeof API !== 'undefined' && lessonStarted) {
-                      API.LMSSetValue('cmi.core.score.raw', percentage.toString());
+                      const scoreResult = API.LMSSetValue('cmi.core.score.raw', percentage.toString());
                       
-                      let location = 'introduction';
-                      if (percentage >= 25) location = 'objectives';
-                      if (percentage >= 50) location = 'activities';
-                      if (percentage >= 75) location = 'assessment';
-                      if (percentage === 100) location = 'completed';
-                      
-                      API.LMSSetValue('cmi.core.lesson_location', location);
-                      
-                      if (percentage === 100) {
-                          API.LMSSetValue('cmi.core.lesson_status', 'completed');
-                          API.LMSFinish('');
-                          lessonStarted = false;
+                      if (scoreResult === 'true') {
+                          let location = 'introduction';
+                          if (percentage >= 25) location = 'objectives';
+                          if (percentage >= 50) location = 'activities';
+                          if (percentage >= 75) location = 'assessment';
+                          if (percentage === 100) location = 'completed';
+                          
+                          API.LMSSetValue('cmi.core.lesson_location', location);
+                          
+                          if (percentage === 100) {
+                              API.LMSSetValue('cmi.core.lesson_status', 'completed');
+                              API.LMSFinish('');
+                              lessonStarted = false;
+                          } else {
+                              API.LMSSetValue('cmi.core.lesson_status', 'incomplete');
+                          }
+                          
+                          API.LMSCommit('');
+                          currentProgress = percentage;
+                          updateDisplay();
+                          logMessage('Progress set to ' + percentage + '% for ' + packageName, 'success');
                       } else {
-                          API.LMSSetValue('cmi.core.lesson_status', 'incomplete');
+                          const errorCode = API.LMSGetLastError();
+                          const errorMsg = API.LMSGetErrorString(errorCode);
+                          logMessage('Failed to set progress: ' + errorMsg + ' (Code: ' + errorCode + ')', 'error');
                       }
-                      
-                      API.LMSCommit('');
-                      currentProgress = percentage;
-                      updateDisplay();
-                      logMessage('Progress set to ' + percentage + '% for ' + packageName);
                   } else {
-                      logMessage('Cannot set progress: API not initialized');
+                      logMessage('Cannot set progress: API not initialized', 'error');
                   }
               }
               
@@ -293,19 +338,25 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                       const status = API.LMSGetValue('cmi.core.lesson_status');
                       const score = API.LMSGetValue('cmi.core.score.raw');
                       const location = API.LMSGetValue('cmi.core.lesson_location');
-                      logMessage('Status: ' + status + ', Score: ' + score + ', Location: ' + location);
+                      logMessage('Status: ' + status + ', Score: ' + score + ', Location: ' + location, 'get');
                   } else {
-                      logMessage('SCORM API not available');
+                      logMessage('SCORM API not available', 'error');
                   }
               }
               
               function suspendLesson() {
                   if (typeof API !== 'undefined' && lessonStarted) {
-                      API.LMSSetValue('cmi.core.exit', 'suspend');
-                      API.LMSCommit('');
-                      logMessage('Lesson suspended for ' + packageName);
+                      const result = API.LMSSetValue('cmi.core.exit', 'suspend');
+                      if (result === 'true') {
+                          API.LMSCommit('');
+                          logMessage('Lesson suspended for ' + packageName, 'success');
+                      } else {
+                          const errorCode = API.LMSGetLastError();
+                          const errorMsg = API.LMSGetErrorString(errorCode);
+                          logMessage('Failed to suspend: ' + errorMsg + ' (Code: ' + errorCode + ')', 'error');
+                      }
                   } else {
-                      logMessage('Cannot suspend: lesson not started');
+                      logMessage('Cannot suspend: lesson not started', 'error');
                   }
               }
               
@@ -314,17 +365,32 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                       if (!lessonStarted) {
                           startLesson();
                       }
-                      API.LMSSetValue('cmi.core.entry', 'resume');
-                      API.LMSCommit('');
-                      logMessage('Lesson resumed for ' + packageName);
+                      const result = API.LMSSetValue('cmi.core.entry', 'resume');
+                      if (result === 'true') {
+                          API.LMSCommit('');
+                          logMessage('Lesson resumed for ' + packageName, 'success');
+                      } else {
+                          const errorCode = API.LMSGetLastError();
+                          const errorMsg = API.LMSGetErrorString(errorCode);
+                          logMessage('Failed to resume: ' + errorMsg + ' (Code: ' + errorCode + ')', 'error');
+                      }
                   } else {
-                      logMessage('SCORM API not available');
+                      logMessage('SCORM API not available', 'error');
                   }
               }
               
               // Initialize display
               updateDisplay();
-              logMessage('Package "${pkg.name}" loaded and ready');
+              logMessage('Package "${pkg.name}" loaded and ready', 'success');
+              
+              // Check if API is available
+              setTimeout(function() {
+                  if (typeof API !== 'undefined') {
+                      logMessage('SCORM API successfully connected', 'success');
+                  } else {
+                      logMessage('SCORM API not found - check console for errors', 'error');
+                  }
+              }, 100);
           </script>
       </body>
       </html>
