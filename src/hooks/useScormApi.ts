@@ -5,7 +5,7 @@ export const useScormApi = () => {
   const [currentPackage, setCurrentPackage] = useState<ScormPackage | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [events, setEvents] = useState<ScormEvent[]>([]);
-  const scormDataRef = useRef<Partial<ScormData>>({});
+  const scormDataRef = useRef<Record<string, string>>({});
   const errorCodeRef = useRef<ScormApiError>('0');
 
   const addEvent = useCallback((event: Omit<ScormEvent, 'id' | 'timestamp'>) => {
@@ -17,6 +17,67 @@ export const useScormApi = () => {
     setEvents(prev => [...prev, newEvent]);
     return newEvent;
   }, []);
+
+  // Valid SCORM 1.2 data model elements
+  const validElements = new Set([
+    'cmi.core.lesson_location',
+    'cmi.core.lesson_status',
+    'cmi.core.score.raw',
+    'cmi.core.score.max',
+    'cmi.core.score.min',
+    'cmi.core.session_time',
+    'cmi.core.total_time',
+    'cmi.core.exit',
+    'cmi.core.credit',
+    'cmi.core.entry',
+    'cmi.suspend_data',
+    'cmi.launch_data',
+    'cmi.comments',
+    'cmi.comments_from_lms',
+    'cmi.core.student_id',
+    'cmi.core.student_name',
+    'cmi.student_data.mastery_score',
+    'cmi.student_data.max_time_allowed',
+    'cmi.student_data.time_limit_action'
+  ]);
+
+  // Read-only elements
+  const readOnlyElements = new Set([
+    'cmi.core.credit',
+    'cmi.core.entry',
+    'cmi.core.student_id',
+    'cmi.core.student_name',
+    'cmi.student_data.mastery_score',
+    'cmi.student_data.max_time_allowed',
+    'cmi.student_data.time_limit_action',
+    'cmi.launch_data',
+    'cmi.comments_from_lms'
+  ]);
+
+  const validateElement = (element: string): boolean => {
+    return validElements.has(element);
+  };
+
+  const validateValue = (element: string, value: string): boolean => {
+    switch (element) {
+      case 'cmi.core.lesson_status':
+        return ['passed', 'completed', 'failed', 'incomplete', 'browsed', 'not attempted'].includes(value);
+      case 'cmi.core.exit':
+        return ['time-out', 'suspend', 'logout', ''].includes(value);
+      case 'cmi.core.credit':
+        return ['credit', 'no-credit'].includes(value);
+      case 'cmi.core.entry':
+        return ['ab-initio', 'resume', ''].includes(value);
+      case 'cmi.student_data.time_limit_action':
+        return ['exit,message', 'exit,no message', 'continue,message', 'continue,no message'].includes(value);
+      case 'cmi.core.score.raw':
+      case 'cmi.core.score.max':
+      case 'cmi.core.score.min':
+        return !isNaN(parseFloat(value)) && isFinite(parseFloat(value));
+      default:
+        return true; // Allow other values
+    }
+  };
 
   const scormApi = useCallback(() => {
     const api = {
@@ -37,7 +98,7 @@ export const useScormApi = () => {
         setIsInitialized(true);
         errorCodeRef.current = '0';
         
-        // Initialize default values
+        // Initialize default values with proper SCORM 1.2 data model
         scormDataRef.current = {
           'cmi.core.lesson_status': 'not attempted',
           'cmi.core.lesson_location': '',
@@ -57,9 +118,17 @@ export const useScormApi = () => {
           'cmi.core.student_name': 'John Doe',
           'cmi.student_data.mastery_score': '80',
           'cmi.student_data.max_time_allowed': '',
-          'cmi.student_data.time_limit_action': 'continue,no message',
-          ...currentPackage?.data
+          'cmi.student_data.time_limit_action': 'continue,no message'
         };
+
+        // Merge with current package data if available
+        if (currentPackage?.data) {
+          Object.keys(currentPackage.data).forEach(key => {
+            if (validElements.has(key) && currentPackage.data[key as keyof ScormData]) {
+              scormDataRef.current[key] = String(currentPackage.data[key as keyof ScormData]);
+            }
+          });
+        }
 
         addEvent({ type: 'initialize', success: true, errorCode: '0' });
         return 'true';
@@ -93,10 +162,16 @@ export const useScormApi = () => {
           return '';
         }
 
-        const value = scormDataRef.current[element as keyof ScormData] || '';
+        if (!validateElement(element)) {
+          errorCodeRef.current = '201';
+          addEvent({ type: 'getValue', element, success: false, errorCode: '201' });
+          return '';
+        }
+
+        const value = scormDataRef.current[element] || '';
         errorCodeRef.current = '0';
-        addEvent({ type: 'getValue', element, value: value.toString(), success: true, errorCode: '0' });
-        return value.toString();
+        addEvent({ type: 'getValue', element, value, success: true, errorCode: '0' });
+        return value;
       },
 
       LMSSetValue: (element: string, value: string): string => {
@@ -107,26 +182,25 @@ export const useScormApi = () => {
           return 'false';
         }
 
-        // Read-only elements check
-        const readOnlyElements = [
-          'cmi.core.credit',
-          'cmi.core.entry',
-          'cmi.core.student_id',
-          'cmi.core.student_name',
-          'cmi.student_data.mastery_score',
-          'cmi.student_data.max_time_allowed',
-          'cmi.student_data.time_limit_action',
-          'cmi.launch_data',
-          'cmi.comments_from_lms'
-        ];
+        if (!validateElement(element)) {
+          errorCodeRef.current = '201';
+          addEvent({ type: 'setValue', element, value, success: false, errorCode: '201' });
+          return 'false';
+        }
 
-        if (readOnlyElements.includes(element)) {
+        if (readOnlyElements.has(element)) {
           errorCodeRef.current = '403';
           addEvent({ type: 'setValue', element, value, success: false, errorCode: '403' });
           return 'false';
         }
 
-        scormDataRef.current[element as keyof ScormData] = value as any;
+        if (!validateValue(element, value)) {
+          errorCodeRef.current = '405';
+          addEvent({ type: 'setValue', element, value, success: false, errorCode: '405' });
+          return 'false';
+        }
+
+        scormDataRef.current[element] = value;
         errorCodeRef.current = '0';
         addEvent({ type: 'setValue', element, value, success: true, errorCode: '0' });
         
@@ -134,7 +208,7 @@ export const useScormApi = () => {
         if (currentPackage) {
           setCurrentPackage(prev => prev ? {
             ...prev,
-            data: { ...prev.data, [element]: value }
+            data: { ...prev.data, [element]: value as any }
           } : null);
         }
         
