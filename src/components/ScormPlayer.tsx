@@ -85,7 +85,7 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                   padding: 40px;
                   border-radius: 20px;
                   backdrop-filter: blur(10px);
-                  max-width: 600px;
+                  max-width: 700px;
                   text-align: center;
                   box-shadow: 0 8px 32px rgba(0,0,0,0.1);
               }
@@ -100,11 +100,11 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                   background: rgba(255,255,255,0.2);
                   color: white;
                   border: 1px solid rgba(255,255,255,0.3);
-                  padding: 12px 24px;
+                  padding: 10px 20px;
                   border-radius: 8px;
-                  font-size: 16px;
+                  font-size: 14px;
                   cursor: pointer;
-                  margin: 10px;
+                  margin: 5px;
                   transition: all 0.3s;
                   backdrop-filter: blur(10px);
               }
@@ -181,6 +181,37 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                   margin: 20px 0;
                   border: 1px solid rgba(255,255,255,0.2);
               }
+              .value-inspector {
+                  background: rgba(255,255,255,0.05);
+                  padding: 20px;
+                  border-radius: 15px;
+                  margin: 20px 0;
+                  border: 1px solid rgba(255,255,255,0.1);
+                  text-align: left;
+              }
+              .value-display {
+                  background: rgba(0,0,0,0.2);
+                  padding: 10px;
+                  border-radius: 8px;
+                  font-family: monospace;
+                  font-size: 12px;
+                  margin-top: 10px;
+                  border: 1px solid rgba(255,255,255,0.2);
+                  min-height: 60px;
+                  overflow-y: auto;
+              }
+              .button-group {
+                  margin: 15px 0;
+                  padding: 10px;
+                  background: rgba(255,255,255,0.05);
+                  border-radius: 10px;
+                  border: 1px solid rgba(255,255,255,0.1);
+              }
+              .button-group h4 {
+                  margin: 0 0 10px 0;
+                  font-size: 16px;
+                  color: rgba(255,255,255,0.9);
+              }
           </style>
       </head>
       <body>
@@ -224,23 +255,40 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                   </div>
               </div>
               
-              <div>
+              <div class="button-group">
+                  <h4>🔧 SCORM Control</h4>
                   <button onclick="initializeScorm()" id="initBtn">🔌 Initialize SCORM</button>
                   <button onclick="startLesson()" id="startBtn" disabled>🚀 Start Lesson</button>
                   <button onclick="terminateScorm()" id="terminateBtn" disabled>🔚 Terminate SCORM</button>
               </div>
               
-              <div>
-                  <button onclick="setProgress(25)" id="progress25" disabled>📈 25% Progress</button>
-                  <button onclick="setProgress(50)" id="progress50" disabled>📊 50% Progress</button>
-                  <button onclick="setProgress(75)" id="progress75" disabled>📈 75% Progress</button>
-                  <button onclick="setProgress(100)" id="progress100" disabled>✅ Complete Lesson</button>
+              <div class="button-group">
+                  <h4>📈 Progress Control</h4>
+                  <button onclick="setProgress(25)" id="progress25" disabled>25% Progress</button>
+                  <button onclick="setProgress(50)" id="progress50" disabled>50% Progress</button>
+                  <button onclick="setProgress(75)" id="progress75" disabled>75% Progress</button>
+                  <button onclick="setProgress(100)" id="progress100" disabled>✅ Complete</button>
               </div>
               
-              <div>
-                  <button onclick="getStatus()" id="statusBtn" disabled>📋 Get Status</button>
+              <div class="button-group">
+                  <h4>📋 Data Inspection</h4>
+                  <button onclick="getAllValues()" id="getAllBtn" disabled>📊 Get All Values</button>
+                  <button onclick="getValue('cmi.core.lesson_status')" id="statusBtn" disabled>📋 Get Status</button>
+                  <button onclick="getValue('cmi.core.score.raw')" id="scoreBtn" disabled>🎯 Get Score</button>
+                  <button onclick="getValue('cmi.core.lesson_location')" id="locationBtn" disabled>📍 Get Location</button>
+              </div>
+              
+              <div class="button-group">
+                  <h4>⏯️ Session Control</h4>
                   <button onclick="suspendLesson()" id="suspendBtn" disabled>⏸️ Suspend</button>
                   <button onclick="resumeLesson()" id="resumeBtn" disabled>▶️ Resume</button>
+              </div>
+              
+              <div class="value-inspector">
+                  <h4>🔍 SCORM Value Inspector</h4>
+                  <div class="value-display" id="valueDisplay">
+                      <div class="info">📡 Click "Get All Values" or specific value buttons to inspect SCORM data</div>
+                  </div>
               </div>
               
               <div class="api-status" id="apiLog">
@@ -289,12 +337,16 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                   }
               }
               
+              function updateValueDisplay(content) {
+                  document.getElementById('valueDisplay').innerHTML = content;
+              }
+              
               function updateButtonStates() {
                   const initBtn = document.getElementById('initBtn');
                   const startBtn = document.getElementById('startBtn');
                   const terminateBtn = document.getElementById('terminateBtn');
                   const progressBtns = ['progress25', 'progress50', 'progress75', 'progress100'];
-                  const actionBtns = ['statusBtn', 'suspendBtn', 'resumeBtn'];
+                  const actionBtns = ['getAllBtn', 'statusBtn', 'scoreBtn', 'locationBtn', 'suspendBtn', 'resumeBtn'];
                   
                   if (isInitialized) {
                       initBtn.disabled = true;
@@ -350,6 +402,9 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                       updateButtonStates();
                       updateInitializationStatus();
                       logMessage('SCORM API initialized successfully for ' + packageName, 'success');
+                      
+                      // Show initial values after initialization
+                      getAllValues();
                   } else {
                       const errorCode = API.LMSGetLastError();
                       const errorMsg = API.LMSGetErrorString(errorCode);
@@ -370,6 +425,7 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                           lessonStarted = false;
                           updateButtonStates();
                           updateInitializationStatus();
+                          updateValueDisplay('<div class="warning">⚠️ SCORM API terminated - no data available</div>');
                           logMessage('SCORM API terminated successfully for ' + packageName, 'success');
                       } else {
                           const errorCode = API.LMSGetLastError();
@@ -377,6 +433,85 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                           logMessage('Failed to terminate SCORM API: ' + errorMsg + ' (Code: ' + errorCode + ')', 'error');
                       }
                   }
+              }
+              
+              function getValue(element) {
+                  if (!isInitialized) {
+                      logMessage('Cannot get value: SCORM API not initialized. Please initialize first.', 'error');
+                      updateValueDisplay('<div class="error">❌ Cannot get value: SCORM API not initialized</div>');
+                      return;
+                  }
+                  
+                  if (typeof API !== 'undefined') {
+                      const value = API.LMSGetValue(element);
+                      const errorCode = API.LMSGetLastError();
+                      
+                      if (errorCode === '0') {
+                          logMessage('Retrieved ' + element + ' = "' + value + '"', 'get');
+                          updateValueDisplay(
+                              '<div class="success">✅ Successfully retrieved value:</div>' +
+                              '<div style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 5px;">' +
+                              '<strong>' + element + '</strong> = "' + value + '"' +
+                              '</div>'
+                          );
+                      } else {
+                          const errorMsg = API.LMSGetErrorString(errorCode);
+                          logMessage('Failed to get ' + element + ': ' + errorMsg + ' (Code: ' + errorCode + ')', 'error');
+                          updateValueDisplay('<div class="error">❌ Failed to get ' + element + ': ' + errorMsg + '</div>');
+                      }
+                  }
+              }
+              
+              function getAllValues() {
+                  if (!isInitialized) {
+                      logMessage('Cannot get values: SCORM API not initialized. Please initialize first.', 'error');
+                      updateValueDisplay('<div class="error">❌ Cannot get values: SCORM API not initialized</div>');
+                      return;
+                  }
+                  
+                  const elements = [
+                      'cmi.core.lesson_status',
+                      'cmi.core.lesson_location',
+                      'cmi.core.score.raw',
+                      'cmi.core.score.max',
+                      'cmi.core.score.min',
+                      'cmi.core.session_time',
+                      'cmi.core.total_time',
+                      'cmi.core.exit',
+                      'cmi.core.credit',
+                      'cmi.core.entry',
+                      'cmi.core.student_id',
+                      'cmi.core.student_name',
+                      'cmi.suspend_data',
+                      'cmi.launch_data',
+                      'cmi.comments'
+                  ];
+                  
+                  let displayContent = '<div class="success">📊 All SCORM Values:</div>';
+                  
+                  elements.forEach(element => {
+                      if (typeof API !== 'undefined') {
+                          const value = API.LMSGetValue(element);
+                          const errorCode = API.LMSGetLastError();
+                          
+                          if (errorCode === '0') {
+                              displayContent += 
+                                  '<div style="margin: 5px 0; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; border-left: 3px solid #10b981;">' +
+                                  '<strong>' + element + '</strong><br>' +
+                                  '<span style="color: #34d399;">"' + (value || '(empty)') + '"</span>' +
+                                  '</div>';
+                          } else {
+                              displayContent += 
+                                  '<div style="margin: 5px 0; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; border-left: 3px solid #ef4444;">' +
+                                  '<strong>' + element + '</strong><br>' +
+                                  '<span style="color: #f87171;">Error: ' + API.LMSGetErrorString(errorCode) + '</span>' +
+                                  '</div>';
+                          }
+                      }
+                  });
+                  
+                  updateValueDisplay(displayContent);
+                  logMessage('Retrieved all SCORM values', 'get');
               }
               
               function startLesson() {
@@ -394,6 +529,7 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                           if (commitResult === 'true') {
                               lessonStarted = true;
                               logMessage('Lesson started successfully for ' + packageName, 'success');
+                              getAllValues(); // Refresh the display
                           } else {
                               const errorCode = API.LMSGetLastError();
                               const errorMsg = API.LMSGetErrorString(errorCode);
@@ -443,6 +579,7 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                               currentProgress = percentage;
                               updateDisplay();
                               logMessage('Progress set to ' + percentage + '% for ' + packageName, 'success');
+                              getAllValues(); // Refresh the display
                               
                               if (percentage === 100) {
                                   logMessage('Lesson completed! 🎉', 'success');
@@ -460,20 +597,6 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                   }
               }
               
-              function getStatus() {
-                  if (!isInitialized) {
-                      logMessage('Cannot get status: SCORM API not initialized', 'error');
-                      return;
-                  }
-                  
-                  if (typeof API !== 'undefined') {
-                      const status = API.LMSGetValue('cmi.core.lesson_status');
-                      const score = API.LMSGetValue('cmi.core.score.raw');
-                      const location = API.LMSGetValue('cmi.core.lesson_location');
-                      logMessage('Status: ' + status + ', Score: ' + score + ', Location: ' + location, 'get');
-                  }
-              }
-              
               function suspendLesson() {
                   if (!isInitialized) {
                       logMessage('Cannot suspend: SCORM API not initialized', 'error');
@@ -486,6 +609,7 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                           const commitResult = API.LMSCommit('');
                           if (commitResult === 'true') {
                               logMessage('Lesson suspended for ' + packageName, 'success');
+                              getAllValues(); // Refresh the display
                           } else {
                               const errorCode = API.LMSGetLastError();
                               const errorMsg = API.LMSGetErrorString(errorCode);
@@ -516,6 +640,7 @@ export const ScormPlayer: React.FC<ScormPlayerProps> = ({ package: scormPackage,
                           const commitResult = API.LMSCommit('');
                           if (commitResult === 'true') {
                               logMessage('Lesson resumed for ' + packageName, 'success');
+                              getAllValues(); // Refresh the display
                           } else {
                               const errorCode = API.LMSGetLastError();
                               const errorMsg = API.LMSGetErrorString(errorCode);
