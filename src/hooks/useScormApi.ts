@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { ScormData, ScormEvent, ScormApiError, ScormPackage } from '../types/scorm';
 
 export const useScormApi = () => {
@@ -7,6 +7,17 @@ export const useScormApi = () => {
   const [events, setEvents] = useState<ScormEvent[]>([]);
   const scormDataRef = useRef<Record<string, string>>({});
   const errorCodeRef = useRef<ScormApiError>('0');
+
+  // Reset SCORM state when package changes
+  useEffect(() => {
+    if (currentPackage) {
+      console.log('🔄 Resetting SCORM API state for new package:', currentPackage.name);
+      setIsInitialized(false);
+      setEvents([]);
+      scormDataRef.current = {};
+      errorCodeRef.current = '0';
+    }
+  }, [currentPackage?.id]); // Reset when package ID changes
 
   const addEvent = useCallback((event: Omit<ScormEvent, 'id' | 'timestamp'>) => {
     const newEvent: ScormEvent = {
@@ -132,7 +143,7 @@ export const useScormApi = () => {
           });
         }
 
-        console.log('✅ SCORM API: Successfully initialized');
+        console.log('✅ SCORM API: Successfully initialized for package:', currentPackage?.name);
         addEvent({ type: 'initialize', success: true, errorCode: '0' });
         return 'true';
       },
@@ -155,7 +166,7 @@ export const useScormApi = () => {
 
         setIsInitialized(false);
         errorCodeRef.current = '0';
-        console.log('✅ SCORM API: Successfully terminated');
+        console.log('✅ SCORM API: Successfully terminated for package:', currentPackage?.name);
         addEvent({ type: 'terminate', success: true, errorCode: '0' });
         return 'true';
       },
@@ -187,7 +198,7 @@ export const useScormApi = () => {
         console.log('💾 SCORM API: LMSSetValue called -', element, '=', value);
         if (!isInitialized) {
           errorCodeRef.current = '301';
-          console.error('❌ SCORM Error: Not initialized');
+          console.error('❌ SCORM Error: Not initialized - call LMSInitialize first');
           addEvent({ type: 'setValue', element, value, success: false, errorCode: '301' });
           return 'false';
         }
